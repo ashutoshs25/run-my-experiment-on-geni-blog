@@ -218,5 +218,18 @@ sudo sysctl -w net.ipv4.tcp_congestion_control=cubic
 
 Then run the same three steps as in the **Generate Data** section and save the ss output to a different file. Use the given data analysis steps and transfer the files to your local machine and plot the relevant data. The main difference between TCP Reno and TCP CUBIC is the window increase function. While Reno uses the traditional linear increase (W=W+1), CUBIC implements a binary search increase which can reach the available bandwidth much faster than Reno. You may read more about cubic at [TCP CUBIC](https://www.cs.princeton.edu/courses/archive/fall16/cos561/papers/Cubic08.pdf)
 
-While TCP CUBIC and Reno are designed with the goal of high throughput, they tend to cause high queuing delays in the network, due to their buffer filling nature. A more recent congestion control proposed by Google tries to maximise throughput and at the same time minimise queuing delay in the network. 
+While TCP CUBIC and Reno are designed with the goal of high throughput, they tend to cause high queuing delays in the network, due to their buffer filling nature. A more recent congestion control proposed by Google tries to maximise throughput and at the same time minimise queuing delay in the network. This is known as the BBR congestion control and you can read more about this at this link [TCP BBR](https://research.google/pubs/pub45646/) and also have a look at the code at [BBR code](https://github.com/google/bbr)
+
+To use the BBR congestion control for your experiment, run
+
+```
+sudo modprobe tcp bbr
+```
+
+on the "sender" and "receiver" nodes. This will load the linux kernel module for TCP BBR. Then, follow the same steps as in the **Generate Data** section. Make one change to the `iperf3` command at the sender 
+
+```
+iperf3 -f m -c receiver -C bbr -P 3 -t 60 -i 0
+```
+The **-C bbr** option is used to specify the congestion control which `iperf3` should use while running the test. So, you can use a different congestion control scheme in this experiment without having to necessarily modify the default congestion control of the "sender" and "receiver" hosts.
  
