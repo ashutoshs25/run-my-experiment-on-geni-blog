@@ -52,7 +52,12 @@ On the end hosts ("sender" and "receiver"), install the `iperf` network testing 
 
 ```
 sudo apt-get update
-sudo apt-get install iperf
+sudo apt-get -y install iperf3
+```
+On the sender host, install moreutils
+
+```
+sudo apt-get -y install moreutils
 ```
 
 Also set TCP Reno as the default TCP congestion control algorithm on both, with
@@ -67,21 +72,69 @@ On the router, turn on packet forwarding with the command
 sudo sysctl -w net.ipv4.ip_forward=1
 ```
 
-Also, set each experiment interface on the router so that the router is a 1 Mbps bottleneck, and buffers up to 0.1 MB, using a [token bucket](https://linux.die.net/man/8/tc-tbf) queue: 
+At the router, use htb to configure the router to act as a 1 Mbps bottleneck with a buffer size of 0.1 MB : 
+
+1. Delete any pre-existing queues on the experiment interface 
+
+   ```
+   sudo tc qdisc del dev eth2 root
+   ```
+   If after this line, you get an output saying something like 
+   
+   ```
+   RTNETLINK answers : No such file or directory
+   ```
+   this is completely normal. Proceed to the next steps.
+
+
+2. Then run the following three commands, in the same order 
+
+   ```
+   sudo tc qdisc replace dev eth2 root handle 1: htb default 3
+
+   sudo tc class add dev eth2 parent 1: classid 1:3 htb rate 1Mbit
+
+   sudo tc qdisc add dev eth2 parent 1:3 handle 3: bfifo limit 0.1MB
+   ```
+   
+   NOTE : Replace 10.10.2.2 with the IP address of the receiver node.
+
+3. Repeat steps 1 and 2 but for the second experiment interface on the router e.g. Instead of `ip route get eth2`, do `ip route get eth1`
+
+### Getting familiar with ss
+
+`ss` is a linux utility used to monitor sockets and display socket statistics. In this lab, we will use `ss` to monitor the TCP sockets being used in our experiment and display useful TCP congestion control information like congestion window (CWND), round-trip time (RTT) and slow start threshold (ssthresh).
+
+To get familiar with `ss`, it is strongly suggested that you go through the `man` page of ss by typing `man ss` in the terminal window on any of the nodes. Also, complete the following set of steps. You will need two terminals open for the "sender" and one for the "receiver" node.
+
+On the "receiver", start an `iperf3` server 
 
 ```
-sudo tc qdisc replace dev eth1 root tbf rate 1mbit limit 0.1mb burst 32kB peakrate 1.01mbit mtu 1600
-sudo tc qdisc replace dev eth2 root tbf rate 1mbit limit 0.1mb burst 32kB peakrate 1.01mbit mtu 1600
+iperf3 -s  -1
 ```
-
-Finally, on the sender host, load the `tcp_probe` kernel module, and tell it to monitor traffic to/from TCP port 5001:
+On the "sender", start one TCP flow going from the "sender" to the "receiver" using iperf3
 
 ```
-sudo modprobe tcp_probe port=5001 full=1
-sudo chmod 444 /proc/net/tcpprobe
+iperf3 -c receiver -i 0 -t 10
 ```
+This `iperf3` transfer will run for 10 seconds. Within this period (while `iperf3` is sending traffic), use another shell on the "sender" to run the following `ss` command
 
-We will use this TCP probe module to monitor the behavior of the TCP congestion control algorithm on the sender.
+```
+ss --no-header -eipn dst 10.10.2.2
+```
+Your output should look something like this
+
+```
+tcp           ESTAB            0                 787712                         10.10.1.2:55058                         10.10.2.2:5201             users:(("iperf3",pid=7201,fd=4)) timer:(on,496ms,0) uid:20003 ino:83439 sk:53 <->
+	 ts sack reno wscale:7,7 rto:1236 rtt:636.44/98.934 mss:1448 pmtu:1500 rcvmss:536 advmss:1448 cwnd:142 bytes_acked:191174 segs_out:277 segs_in:59 data_segs_out:275 send 2.6Mbps lastsnd:16 lastrcv:1620 lastack:16 pacing_rate 5.2Mbps delivery_rate 956.8Kbps busy:1580ms rwnd_limited:676ms(42.8%) unacked:142 rcv_space:14480 rcv_ssthresh:64088 notsent:582096 minrtt:0.655
+tcp           ESTAB            0                 0                              10.10.1.2:55056                         10.10.2.2:5201             users:(("iperf3",pid=7201,fd=3)) uid:20003 ino:83438 sk:54 <->
+	 ts sack reno wscale:7,7 rto:208 rtt:5.722/9.291 ato:40 mss:1448 pmtu:1500 rcvmss:536 advmss:1448 cwnd:10 bytes_acked:124 bytes_received:4 segs_out:8 segs_in:7 data_segs_out:3 data_segs_in:3 send 20.2Mbps lastsnd:1624 lastrcv:1580 lastack:1580 pacing_rate 40.5Mbps delivery_rate 8.7Mbps busy:44ms rcv_space:14480 rcv_ssthresh:64088 minrtt:0.705
+```
+From the output, you can see that `ss` can be used to display information like port number being used(`pid=7201`), flow identifier (`fd=3` or `fd=4`) and detailed statistics of the ongoing TCP transfer. 
+
+One thing you should note here is that while we generated a single `iperf3` flow in the above experiment, the `ss` output printed statistics of two different flows with different IDs (`fd=3` and `fd=4`). While the flow with ID 4 (`fd=4`) is the one being used for the data transfer, TCP uses another flow usually with ID=3 (`fd=3`) to send certain control information over the network. For the rest of the experiment, while the `ss` commands we use will generate the socket statistics for the control flow (`fd=3`), you would need to ignore it in your data analysis and plotting, since this experiment is only focused on how TCP congestion control is used to control the "data" traffic. 
+
+Once you have made yourself familiar with `ss` and `iperf3`, you may proceed to the next part of the experiment.
 
 ### Generate data
 
@@ -90,19 +143,24 @@ Next, we will generate some TCP flows between the two end hosts, and use it to o
 On the "receiver", run
 
 ```
-iperf -s
+iperf3 -s -1
 ```
 
 On the "sender", run
 
 ```
-dd if=/proc/net/tcpprobe ibs=128 obs=128 | tee /tmp/tcpprobe.dat
+EXPID=sender
+```
+On the same "sender" terminal where you ran the previous command, run `ss` in an infinite loop so that you can monitor and display TCP socket statistics for the entire duration of your experiment.
+
+```
+rm -f "$EXPID"-ss.txt; while true; do ss --no-header -eipn dst 10.10.2.2 | ts '%.s' | tee -a "$EXPID"-ss.txt; done
 ```
 
 Open another SSH session to the "sender" and run
 
 ```
-iperf -t 60 -c receiver -P 3
+iperf3 -f m -c receiver -P 3 -t 60 -i 0
 ```
 
 to start the TCP flows. Here
@@ -110,11 +168,12 @@ to start the TCP flows. Here
 * `-t 60` says to run for 60 seconds
 * `-c receiver` says to send traffic to the host named "receiver"
 * `-P 3` says to send 3 parallel TCP flows
+* `-i 0` is used to diable periodic bandwidth reports
 
 
-You will see a final status report in the `iperf` window after the `iperf` sender finishes, which should take about a minute.  In the window where the TCP probe is running, you should see a line of output for each TCP packet.
+You will see a final status report in the `iperf3` window after the `iperf3` sender finishes, which should take about a minute.  In the window where `ss` is running, you should see a several lines of output for each TCP flow. The `ss` output will also have been saved to a file named `sender-ss.txt`
 
-The output of the TCP probe will be saved in `/tmp/tcpprobe.dat` on the sender. Use `scp` to transfer this file to your own laptop for processing.
+Use `scp` to transfer this file to your own laptop for processing.
 
 ### Understanding the TCP Probe output
 
