@@ -207,3 +207,16 @@ Annotate your plot, similar to Figure 2 in the [Results](#results) section, to s
 * Instances of timeout
 
 Using your plot and/or experiment data, explain how the behavior of TCP is different in the "Slow Start" and "Congestion Avoidance" phases. Also, using your plot, explain what happens to both the congestion window and the slow start threshold when 3 duplicate ACKs are received.
+
+### Additional Experiment : Try different congestion control schemes
+
+Several TCP congestion control algorithms have been designed in the last 3 decades. TCP Reno and TCP Cubic are the most widely deployed flavors of TCP congestion control in today's systems. To run the same experiment but using the TCP CUBIC algorithms, you can modify the default congestion control at the "sender" and "receiver" nodes using :
+
+```
+sudo sysctl -w net.ipv4.tcp_congestion_control=cubic
+```
+
+Then run the same three steps as in the **Generate Data** section and save the ss output to a different file. Use the given data analysis steps and transfer the files to your local machine and plot the relevant data. The main difference between TCP Reno and TCP CUBIC is the window increase function. While Reno uses the traditional linear increase (W=W+1), CUBIC implements a binary search increase which can reach the available bandwidth much faster than Reno. You may read more about cubic at [TCP CUBIC](https://www.cs.princeton.edu/courses/archive/fall16/cos561/papers/Cubic08.pdf)
+
+While TCP CUBIC and Reno are designed with the goal of high throughput, they tend to cause high queuing delays in the network, due to their buffer filling nature. A more recent congestion control proposed by Google tries to maximise throughput and at the same time minimise queuing delay in the network. 
+ 
