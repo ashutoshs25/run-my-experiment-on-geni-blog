@@ -175,35 +175,21 @@ You will see a final status report in the `iperf3` window after the `iperf3` sen
 
 Use `scp` to transfer this file to your own laptop for processing.
 
-### Understanding the TCP Probe output
+### Data Analysis
 
-The TCP module probe records a line of output every time a packet is sent, if either the destination or source port number in the TCP packet header is 5001 (since we loaded it with the `port=5001` option).
+Use the following commands to processes the raw `ss` output into a csv file whose colums are : timestamp, flow ID, cwnd (in MSS), ssthresh (in MSS) and Smoothed RTT (in ms).
 
-Each line of output will include the following fields, in order:
+```
+cat $EXPID-ss.txt | sed -e ':a; /<->$/ { N; s/<->\n//; ba; }'  | grep "iperf3" > $EXPID-ss-processed.txt
+cat $EXPID-ss-processed.txt | awk '{print $1}' > ts-$EXPID.txt
+cat $EXPID-ss-processed.txt | grep -oP '\bcwnd:.*?(\s|$)' |  awk -F '[:,]' '{print $2}' | tr -d ' ' > cwnd-$EXPID.txt
+cat $EXPID-ss-processed.txt | grep -oP '\brtt:.*?(\s|$)' |  awk -F '[:,]' '{print $2}' | tr -d ' '  | cut -d '/' -f 1   > srtt-$EXPID.txt
+cat $EXPID-ss-processed.txt | grep -oP '\bssthresh:.*?(\s|$)' |  awk -F '[:,]' '{print $2}' | tr -d ' ' > ssthresh-$EXPID.txt
+cat $EXPID-ss-processed.txt | grep -oP '\bfd=.*?(\s|$)' |  awk -F '[=,]' '{print $2}' | tr -d ')' | tr -d ' '   > fd-$EXPID.txt
+paste ts-$EXPID.txt fd-$EXPID.txt cwnd-$EXPID.txt ssthresh-$EXPID.txt srtt-$EXPID.txt -d ',' > $EXPID-ss.csv
+```
 
-
-<table id="table-1" class="table table-striped table-bordered col-2" data-columns="2"><thead>  
-<tr><th class="col-1">Field</th><th class="col-2">Explanation</th></tr></thead>  
-<tbody>  
-<tr class="row-1"><td class="col-1">Time</td><td class="col-2">Time (in seconds) since beginning of probe output</td></tr>  
-<tr class="row-2"><td class="col-1">Sender</td><td class="col-2">Source address and port of the packet, as IP:port</td></tr>  
-<tr class="row-3"><td class="col-1">Receiver</td><td class="col-2">Destination address and port of the packet, as IP:port</td></tr>  
-<tr class="row-4"><td class="col-1">Bytes</td><td class="col-2">Bytes in packet</td></tr>  
-<tr class="row-5"><td class="col-1">Next</td><td class="col-2">Next send sequence number, in hex format</td></tr>  
-<tr class="row-6"><td class="col-1">Unacknowledged</td><td class="col-2">Smallest sequence number of packet send but unacknowledged, in hex format</td></tr>  
-<tr class="row-7"><td class="col-1">Send CWND</td><td class="col-2">Size of send congestion window for this connection (in MSS)</td></tr>  
-<tr class="row-8"><td class="col-1">Slow start threshold</td><td class="col-2">Size of send congestion window for this connection (in MSS)</td></tr>
-<tr class="row-9"><td class="col-1">Send window</td><td class="col-2">Send window size (in MSS). Set to the minimum of send CWND and receive window size</td></tr>
-<tr class="row-10"><td class="col-1">Smoothed RTT</td><td class="col-2">Smoothed estimated RTT for this connection (in ms)</td></tr>
-<tr class="row-11"><td class="col-1">Receive window</td><td class="col-2">Receiver window size (in MSS), received in the lack ACK. This limit prevents the receiver buffer from overflowing,
- i.e. prevents the sender from sending at a rate that is faster than the receiver can process the data.</td></tr></tbody>  
-</table>
-
-By looking at your TCP probe data, you can observe the behavior of the TCP congestion control algorithm. 
-
-(The last line in your data file may be truncated - you may remove that line.)
-
-Note that in Linux, the slow start threshold takes on the value 2147483647 when it is initialized. It's set to this extreme number - which is not a realistic value for this metric - to show that it hasn't been computed yet. You can ignore that value when it occurs (but you should still use the congestion window that is recorded for those rows - don't throw them out entirely). For repeated connections, the slow start threshold is usually "remembered" from the last connection, so if you run this experiment multiple times, you may not see that extreme value in later experiments.
+Transfer the `ss-sender.txt` and `ss-sender.csv` files to your laptop using SCP. Use the .csv file to generate the plots required in the Exercise section below.
 
 
 
