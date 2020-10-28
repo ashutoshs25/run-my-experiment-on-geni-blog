@@ -210,7 +210,7 @@ Using your plot and/or experiment data, explain how the behavior of TCP is diffe
 
 ### Additional Experiment : Try different congestion control schemes
 
-Several TCP congestion control algorithms have been designed in the last 3 decades. TCP Reno and TCP Cubic are the most widely deployed flavors of TCP congestion control in today's systems. To run the same experiment but using the TCP CUBIC algorithms, you can modify the default congestion control at the "sender" and "receiver" nodes using :
+Several TCP congestion control algorithms have been proposed in the last three decades. TCP Reno and TCP CUBIC are the most widely deployed flavors of TCP congestion control in today's systems. To run the same experiment using the TCP CUBIC algorithm, you can modify the default congestion control at the "sender" and "receiver" nodes using :
 
 ```
 sudo sysctl -w net.ipv4.tcp_congestion_control=cubic
